@@ -21,7 +21,9 @@ export type RelationType =
   | 'husband' | 'wife' 
   | 'elder_bro' | 'younger_bro' 
   | 'elder_sis' | 'younger_sis' 
-  | 'son' | 'daughter';
+  | 'son' | 'daughter'
+  | 'cousin_elder_male'   // 堂哥
+  | 'cousin_elder_female'; // 堂姐
 
 export interface RelationButton {
   id: RelationType;

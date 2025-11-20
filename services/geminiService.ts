@@ -1,8 +1,6 @@
 import { GoogleGenAI, Type } from "@google/genai";
-import { KinshipResponse, Language, Gender } from "../types";
+import { KinshipResponse, Language, Gender, RelationType } from "../types";
 
-// Optimization 1: In-memory cache to store results of previous calculations.
-// This makes repeat queries (or undo/redo actions) instant.
 const calculationCache = new Map<string, KinshipResponse>();
 
 const getClient = () => {
@@ -22,12 +20,11 @@ const LANGUAGE_MAP: Record<Language, string> = {
 };
 
 export const calculateRelationship = async (
-  chain: string[], 
+  chain: RelationType[], 
   userGender: Gender, 
   language: Language
 ): Promise<KinshipResponse> => {
-  // 1. Check Cache before API Call
-  // Create a unique key based on all input parameters
+  
   const cacheKey = `${language}:${userGender}:${chain.join('>')}`;
   
   if (calculationCache.has(cacheKey)) {
@@ -39,24 +36,49 @@ export const calculateRelationship = async (
   const chainString = chain.join(" -> ");
   const targetLang = LANGUAGE_MAP[language];
   
-  // 2. Streamlined Prompt for Faster Processing
   const prompt = `
-    Act as a genealogy API.
+    Act as a strict logic engine for genealogy.
     
     Input:
     - Speaker Gender: ${userGender}
     - Relation Chain: ${chainString}
-    - Output Language: ${targetLang}
+    - Target Language: ${targetLang}
     
-    Requirements:
-    1. Calculate the kinship title. If invalid, state it.
-    2. Use correct honorifics for ${targetLang} (e.g. elder vs younger distinctions).
-    3. Select ONE emoji that best fits the relative's gender/age (e.g. 👴, 👧).
+    ALGORITHMIC RULES (Apply in order):
+    
+    RULE #1: CHAIN REDUCTION (Step-by-Step)
+    You must calculate the identity at each step before moving to the next.
+    
+    Example: "mother -> younger_bro -> daughter"
+    1. [Start]: Self
+    2. + [mother]: Mother
+    3. Mother + [younger_bro]: Maternal Uncle (NOT Brother)
+    4. Maternal Uncle + [daughter]: Maternal Cousin (表姐/表妹) (NOT Niece)
+    
+    RULE #2: GENERATIONAL MATH
+    - Parent (+1)
+    - Sibling/Cousin (0)
+    - Child (-1)
+    
+    Calculate the Net Generation:
+    - If Net Generation is 0 (e.g., +1 +0 -1): It MUST be a Sibling, Cousin, or Spouse. It CANNOT be a Niece/Nephew.
+    - If Net Generation is -1 (e.g., 0 -1): It is a Nephew/Niece or Child.
+    
+    RULE #3: SPECIFIC PATTERN OVERRIDES (Highest Priority)
+    - [Parent] -> [Sibling] -> [Child] === COUSIN (Generation 0).
+      (e.g. mother -> younger_bro -> daughter = 表妹/表姐)
+      (e.g. father -> elder_bro -> son = 堂哥)
+    - [Sibling] -> [Child] === NEPHEW/NIECE (Generation -1).
+    
+    Task:
+    1. Perform the Chain Reduction.
+    2. Verify with Generational Math.
+    3. Provide the final title in ${targetLang}.
     
     Output JSON:
     - title (Formal)
     - colloquial (Address term)
-    - description (Brief 1 sentence)
+    - description (Explain the path: e.g. "Mother's Brother's Daughter")
     - emoji
     - relationPath
   `;
@@ -65,9 +87,6 @@ export const calculateRelationship = async (
     model: 'gemini-2.5-flash',
     contents: prompt,
     config: {
-      // Optimization 3: Disable Thinking Budget
-      // This ensures the model generates tokens immediately without an internal reasoning chain,
-      // which is ideal for low-latency lookup tasks.
       thinkingConfig: { thinkingBudget: 0 }, 
       responseMimeType: "application/json",
       responseSchema: {
@@ -88,8 +107,6 @@ export const calculateRelationship = async (
   if (!text) throw new Error("No response from Gemini");
   
   const result = JSON.parse(text) as KinshipResponse;
-
-  // 4. Store Result in Cache
   calculationCache.set(cacheKey, result);
   
   return result;

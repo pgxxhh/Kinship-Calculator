@@ -3,7 +3,7 @@ import { KinshipResponse, Language, LoadingState } from '../types';
 import Loader from './Loader';
 
 interface DisplayScreenProps {
-  chain: string[];
+  chainLabels: string[];
   result: KinshipResponse | null;
   loadingState: LoadingState;
   lang: Language;
@@ -18,15 +18,15 @@ const TTS_LANG_MAP: Record<Language, string> = {
   ms: 'ms-MY'
 };
 
-const UI_LABELS: Record<Language, { current: string, clear: string, calculating: string, call: string }> = {
-  zh: { current: '当前关系', clear: '清空', calculating: '计算中...', call: '称呼' },
-  en: { current: 'Chain', clear: 'Clear', calculating: 'Thinking...', call: 'Call' },
-  th: { current: 'ความสัมพันธ์', clear: 'ล้าง', calculating: 'กำลังคำนวณ...', call: 'เรียก' },
-  id: { current: 'Hubungan', clear: 'Hapus', calculating: 'Menghitung...', call: 'Panggilan' },
-  ms: { current: 'Hubungan', clear: 'Padam', calculating: 'Mengira...', call: 'Panggilan' }
+const UI_LABELS: Record<Language, { current: string, clear: string, calculating: string, call: string, error: string }> = {
+  zh: { current: '当前关系', clear: '清空', calculating: '计算中...', call: '称呼', error: '计算失败' },
+  en: { current: 'Chain', clear: 'Clear', calculating: 'Thinking...', call: 'Call', error: 'Failed' },
+  th: { current: 'ความสัมพันธ์', clear: 'ล้าง', calculating: 'กำลังคำนวณ...', call: 'เรียก', error: 'ล้มเหลว' },
+  id: { current: 'Hubungan', clear: 'Hapus', calculating: 'Menghitung...', call: 'Panggilan', error: 'Gagal' },
+  ms: { current: 'Hubungan', clear: 'Padam', calculating: 'Mengira...', call: 'Panggilan', error: 'Gagal' }
 };
 
-const DisplayScreen: React.FC<DisplayScreenProps> = ({ chain, result, loadingState, lang, onClear }) => {
+const DisplayScreen: React.FC<DisplayScreenProps> = ({ chainLabels, result, loadingState, lang, onClear }) => {
   const [isSpeaking, setIsSpeaking] = useState(false);
 
   // Cancel speech if result changes or component unmounts
@@ -41,7 +41,7 @@ const DisplayScreen: React.FC<DisplayScreenProps> = ({ chain, result, loadingSta
   const ui = UI_LABELS[lang];
 
   const getDisplayChain = () => {
-    if (chain.length === 0) {
+    if (chainLabels.length === 0) {
       switch (lang) {
         case 'zh': return '请选择关系...';
         case 'th': return 'เลือกความสัมพันธ์...';
@@ -51,19 +51,16 @@ const DisplayScreen: React.FC<DisplayScreenProps> = ({ chain, result, loadingSta
       }
     }
     const separator = lang === 'en' ? ' \'s ' : ' + ';
-    return chain.join(separator);
+    return chainLabels.join(separator);
   };
 
   const handleSpeak = (text: string) => {
     if (!text) return;
 
-    // Cancel any current speech
     window.speechSynthesis.cancel();
 
     const utterance = new SpeechSynthesisUtterance(text);
-    // Set language based on app state
     utterance.lang = TTS_LANG_MAP[lang];
-    // Adjust rate slightly for clarity
     utterance.rate = 0.9; 
 
     utterance.onstart = () => setIsSpeaking(true);
@@ -73,35 +70,23 @@ const DisplayScreen: React.FC<DisplayScreenProps> = ({ chain, result, loadingSta
     window.speechSynthesis.speak(utterance);
   };
 
-  return (
-    <div className="w-full bg-white rounded-2xl shadow-inner p-6 min-h-[180px] flex flex-col justify-between relative overflow-hidden border-4 border-red-900/10">
-      {/* Decorative corner patterns */}
-      <div className="absolute top-0 left-0 w-12 h-12 border-t-4 border-l-4 border-red-800 rounded-tl-xl opacity-20"></div>
-      <div className="absolute top-0 right-0 w-12 h-12 border-t-4 border-r-4 border-red-800 rounded-tr-xl opacity-20"></div>
-      
-      {/* Input Chain Display */}
-      <div className="relative z-10">
-         <div className="text-gray-500 text-xs font-bold uppercase tracking-widest mb-2 flex justify-between items-center">
-            <span>{ui.current}</span>
-            {chain.length > 0 && (
-              <button onClick={onClear} className="text-red-400 hover:text-red-600 transition-colors">
-                {ui.clear}
-              </button>
-            )}
-         </div>
-         <div className={`font-medium text-gray-800 leading-relaxed ${chain.length > 5 ? 'text-sm' : 'text-lg'}`}>
-           {getDisplayChain()}
-         </div>
-      </div>
+  const renderContent = () => {
+    if (loadingState === LoadingState.CALCULATING) {
+      return <Loader message={ui.calculating} />;
+    }
 
-      {/* Result Area */}
-      <div className="mt-4 pt-4 border-t border-gray-100 relative z-10 min-h-[80px] flex flex-col justify-end items-end text-right">
-        {loadingState === LoadingState.CALCULATING ? (
-          <Loader message={ui.calculating} />
-        ) : result ? (
-          <div className="animate-fade-in-up flex flex-col items-end">
-             
-             {/* Main Title with Audio Button */}
+    if (loadingState === LoadingState.ERROR) {
+       return (
+        <div className="flex flex-col items-end justify-center h-full text-red-400 animate-pulse">
+          <span className="text-3xl mb-2">⚠️</span>
+          <span className="text-sm font-bold">{ui.error}</span>
+        </div>
+      );
+    }
+
+    if (result) {
+      return (
+        <div className="animate-fade-in-up flex flex-col items-end">
              <div className="flex items-center gap-3 mb-1 group">
                <button 
                  onClick={() => handleSpeak(result.title)}
@@ -130,7 +115,6 @@ const DisplayScreen: React.FC<DisplayScreenProps> = ({ chain, result, loadingSta
                  onClick={() => handleSpeak(result.title)}
                >
                  <span>{result.title}</span>
-                 {/* Render Emoji */}
                  {result.emoji && (
                     <span className="text-4xl filter drop-shadow-sm animate-bounce-slight" role="img" aria-label="emoji">
                         {result.emoji}
@@ -149,14 +133,39 @@ const DisplayScreen: React.FC<DisplayScreenProps> = ({ chain, result, loadingSta
              )}
              <p className="text-gray-400 text-xs mt-2 max-w-[200px] ml-auto">{result.description}</p>
           </div>
-        ) : (
-           <div className="text-gray-300 text-4xl font-serif opacity-30">
-             ?
-           </div>
-        )}
+      );
+    }
+    
+    return (
+      <div className="text-gray-300 text-4xl font-serif opacity-30">
+        ?
+      </div>
+    );
+  };
+
+  return (
+    <div className="w-full bg-white rounded-2xl shadow-inner p-6 min-h-[180px] flex flex-col justify-between relative overflow-hidden border-4 border-red-900/10">
+      <div className="absolute top-0 left-0 w-12 h-12 border-t-4 border-l-4 border-red-800 rounded-tl-xl opacity-20"></div>
+      <div className="absolute top-0 right-0 w-12 h-12 border-t-4 border-r-4 border-red-800 rounded-tr-xl opacity-20"></div>
+      
+      <div className="relative z-10">
+         <div className="text-gray-500 text-xs font-bold uppercase tracking-widest mb-2 flex justify-between items-center">
+            <span>{ui.current}</span>
+            {chainLabels.length > 0 && (
+              <button onClick={onClear} className="text-red-400 hover:text-red-600 transition-colors">
+                {ui.clear}
+              </button>
+            )}
+         </div>
+         <div className={`font-medium text-gray-800 leading-relaxed ${chainLabels.length > 5 ? 'text-sm' : 'text-lg'}`}>
+           {getDisplayChain()}
+         </div>
+      </div>
+
+      <div className="mt-4 pt-4 border-t border-gray-100 relative z-10 min-h-[80px] flex flex-col justify-end items-end text-right">
+         {renderContent()}
       </div>
       
-      {/* Background Pattern */}
       <div className="absolute inset-0 opacity-5 bg-[radial-gradient(#ef4444_1px,transparent_1px)] [background-size:16px_16px] pointer-events-none"></div>
     </div>
   );

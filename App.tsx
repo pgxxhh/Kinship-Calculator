@@ -16,27 +16,32 @@ const RELATION_LABELS: Record<Language, Record<RelationType, string>> = {
   zh: {
     father: '父亲', mother: '母亲', husband: '丈夫', wife: '妻子',
     elder_bro: '哥哥', elder_sis: '姐姐', younger_bro: '弟弟', younger_sis: '妹妹',
-    son: '儿子', daughter: '女儿'
+    son: '儿子', daughter: '女儿',
+    cousin_elder_male: '堂哥', cousin_elder_female: '堂姐'
   },
   en: {
     father: 'Father', mother: 'Mother', husband: 'Husband', wife: 'Wife',
     elder_bro: 'Older Bro', elder_sis: 'Older Sis', younger_bro: 'Younger Bro', younger_sis: 'Younger Sis',
-    son: 'Son', daughter: 'Daughter'
+    son: 'Son', daughter: 'Daughter',
+    cousin_elder_male: 'Cousin ♂', cousin_elder_female: 'Cousin ♀'
   },
   th: {
     father: 'พ่อ', mother: 'แม่', husband: 'สามี', wife: 'ภรรยา',
     elder_bro: 'พี่ชาย', elder_sis: 'พี่สาว', younger_bro: 'น้องชาย', younger_sis: 'น้องสาว',
-    son: 'ลูกชาย', daughter: 'ลูกสาว'
+    son: 'ลูกชาย', daughter: 'ลูกสาว',
+    cousin_elder_male: 'ลูกพี่ลูกน้อง ♂', cousin_elder_female: 'ลูกพี่ลูกน้อง ♀'
   },
   id: {
     father: 'Ayah', mother: 'Ibu', husband: 'Suami', wife: 'Istri',
     elder_bro: 'Abang', elder_sis: 'Kakak', younger_bro: 'Adik Lk', younger_sis: 'Adik Pr',
-    son: 'Anak Lk', daughter: 'Anak Pr'
+    son: 'Anak Lk', daughter: 'Anak Pr',
+    cousin_elder_male: 'Sepupu ♂', cousin_elder_female: 'Sepupu ♀'
   },
   ms: {
     father: 'Bapa', mother: 'Ibu', husband: 'Suami', wife: 'Isteri',
     elder_bro: 'Abang', elder_sis: 'Kakak', younger_bro: 'Adik Lk', younger_sis: 'Adik Pr',
-    son: 'Anak Lk', daughter: 'Anak Pr'
+    son: 'Anak Lk', daughter: 'Anak Pr',
+    cousin_elder_male: 'Sepupu ♂', cousin_elder_female: 'Sepupu ♀'
   }
 };
 
@@ -51,23 +56,28 @@ const RELATION_BUTTONS: RelationButton[] = [
   { id: 'younger_sis', gender: 'f' },
   { id: 'son', gender: 'm' },
   { id: 'daughter', gender: 'f' },
+  { id: 'cousin_elder_male', gender: 'm' },
+  { id: 'cousin_elder_female', gender: 'f' },
 ];
 
 const App: React.FC = () => {
   // State
   const [language, setLanguage] = useState<Language>('zh');
   const [myGender, setMyGender] = useState<Gender>('male');
-  const [chain, setChain] = useState<string[]>([]);
+  
+  // REFACTOR: Chain now stores IDs (RelationType) instead of string labels.
+  // This prevents logic errors by using standardized keys.
+  const [chain, setChain] = useState<RelationType[]>([]);
+  
   const [result, setResult] = useState<KinshipResponse | null>(null);
   const [loadingState, setLoadingState] = useState<LoadingState>(LoadingState.IDLE);
 
   // Handlers
   const handleAddRelation = (btn: RelationButton) => {
     setLoadingState(LoadingState.IDLE);
-    setResult(null); // Clear previous result when adding new step
-    
-    const label = RELATION_LABELS[language][btn.id];
-    setChain(prev => [...prev, label]);
+    setResult(null); 
+    // Store ID
+    setChain(prev => [...prev, btn.id]);
   };
 
   const handleUndo = () => {
@@ -88,6 +98,7 @@ const App: React.FC = () => {
 
     setLoadingState(LoadingState.CALCULATING);
     try {
+      // Pass IDs to service
       const data = await calculateRelationship(chain, myGender, language);
       setResult(data);
       setLoadingState(LoadingState.COMPLETE);
@@ -100,18 +111,20 @@ const App: React.FC = () => {
   const handleLanguageChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const newLang = e.target.value as Language;
     setLanguage(newLang);
-    // Optional: Clear chain when changing language to avoid mixed languages in chain
-    setChain([]); 
+    // We don't need to clear chain anymore because it uses language-agnostic IDs!
     setResult(null);
+  };
+
+  // Helper to map IDs to current language labels for UI display
+  const getDisplayLabels = () => {
+    return chain.map(id => RELATION_LABELS[language][id]);
   };
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-[#8B0000] to-[#2a0808] text-white font-sans selection:bg-yellow-500 selection:text-red-900 flex items-center justify-center p-4 md:p-8">
       
-      {/* Main Calculator Container */}
       <div className="w-full max-w-[420px] bg-[#4a0a0a] border-2 border-[#B8860B]/50 rounded-[32px] shadow-[0_20px_50px_rgba(0,0,0,0.6)] overflow-hidden flex flex-col relative">
         
-        {/* Decorative Header Bar */}
         <div className="h-8 bg-[#B8860B] flex items-center justify-center relative">
            <div className="absolute inset-x-0 top-1 h-[1px] bg-yellow-200 opacity-50"></div>
            <span className="text-[#4a0a0a] font-bold text-xs tracking-[0.2em] uppercase">
@@ -121,9 +134,7 @@ const App: React.FC = () => {
 
         <div className="p-6 flex-grow flex flex-col gap-6">
           
-          {/* Top Controls: Language & Gender */}
           <div className="flex justify-between items-center px-2">
-             {/* Language Dropdown */}
              <div className="relative">
                 <select
                   value={language}
@@ -153,9 +164,8 @@ const App: React.FC = () => {
              </div>
           </div>
 
-          {/* Display Screen */}
           <DisplayScreen 
-            chain={chain}
+            chainLabels={getDisplayLabels()} 
             result={result} 
             loadingState={loadingState}
             lang={language}
@@ -196,17 +206,18 @@ const App: React.FC = () => {
               =
             </button>
 
-            {/* Relatives Buttons */}
+            {/* Relatives Buttons - Now includes Cousins */}
             {RELATION_BUTTONS.map((btn) => (
               <button
                 key={btn.id}
                 onClick={() => handleAddRelation(btn)}
-                className="col-span-1 aspect-square rounded-xl bg-[#FF6B6B] hover:bg-[#FF7C7C] active:scale-95 text-white border-b-4 border-[#CE4040] transition-all flex flex-col items-center justify-center shadow-sm relative overflow-hidden group"
+                className={`col-span-1 aspect-square rounded-xl bg-[#FF6B6B] hover:bg-[#FF7C7C] active:scale-95 text-white border-b-4 border-[#CE4040] transition-all flex flex-col items-center justify-center shadow-sm relative overflow-hidden group ${btn.id.includes('cousin') ? 'bg-[#ff8585]' : ''}`}
               >
                 <div className="absolute top-1 right-1 text-[10px] opacity-40 font-bold">
                   {btn.gender === 'm' ? '♂' : '♀'}
                 </div>
                 <span className={`font-bold leading-none break-words text-center px-1 ${
+                  RELATION_LABELS[language][btn.id].length > 6 ? 'text-[9px]' : 
                   language === 'zh' ? 'text-lg' : 'text-[10px]'
                 }`}>
                   {RELATION_LABELS[language][btn.id]}
@@ -217,7 +228,6 @@ const App: React.FC = () => {
           </div>
         </div>
 
-        {/* Footer text */}
         <div className="pb-4 text-center opacity-30 text-[10px] font-mono">
            Gemini 2.5 Flash Powered
         </div>
