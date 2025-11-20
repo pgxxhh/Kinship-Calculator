@@ -37,48 +37,50 @@ export const calculateRelationship = async (
   const targetLang = LANGUAGE_MAP[language];
   
   const prompt = `
-    Act as a strict logic engine for genealogy.
+    Act as a strict genealogy engine.
     
     Input:
     - Speaker Gender: ${userGender}
-    - Relation Chain: ${chainString}
-    - Target Language: ${targetLang}
+    - Relation Chain (IDs): ${chainString}
+    - Output Language: ${targetLang}
     
-    ALGORITHMIC RULES (Apply in order):
+    STRICT LOGIC & REDUCTION RULES (Apply in Order):
     
-    RULE #1: CHAIN REDUCTION (Step-by-Step)
-    You must calculate the identity at each step before moving to the next.
+    RULE #0: PURE SIBLING CHAIN (HIGHEST PRIORITY)
+    - IF the chain consists ONLY of ('elder_bro', 'younger_bro', 'elder_sis', 'younger_sis'), AND contains NO 'son' or 'daughter':
+    - The result MUST be a Sibling (Brother/Sister) or Self.
+    - IT CANNOT BE A NEPHEW/NIECE.
+    - Example: "elder_bro -> elder_sis -> younger_bro" = Brother.
+
+    RULE #1: NEPHEW / NIECE (Generation -1)
+    - [Sibling] -> [Child] = NEPHEW / NIECE.
+    - 'elder_sis' -> 'son' = Nephew (外甥).
     
-    Example: "mother -> younger_bro -> daughter"
-    1. [Start]: Self
-    2. + [mother]: Mother
-    3. Mother + [younger_bro]: Maternal Uncle (NOT Brother)
-    4. Maternal Uncle + [daughter]: Maternal Cousin (表姐/表妹) (NOT Niece)
+    RULE #2: COUSIN (Generation 0)
+    - [Parent] -> [Sibling] -> [Child] = COUSIN.
+    - THIS IS CRITICAL. IT IS NEVER A NIECE/NEPHEW.
+    - 'mother' -> 'younger_bro' (Uncle) -> 'daughter' = Maternal Cousin (表姐/表妹).
+    - 'father' -> 'younger_bro' (Uncle) -> 'son' = Paternal Cousin (堂弟).
+
+    RULE #3: PARENTS
+    - [Sibling] -> [Parent] = PARENT.
+       - 'elder_bro' -> 'father' = Father.
+       - 'elder_bro' -> 'mother' = Mother.
     
-    RULE #2: GENERATIONAL MATH
-    - Parent (+1)
-    - Sibling/Cousin (0)
-    - Child (-1)
-    
-    Calculate the Net Generation:
-    - If Net Generation is 0 (e.g., +1 +0 -1): It MUST be a Sibling, Cousin, or Spouse. It CANNOT be a Niece/Nephew.
-    - If Net Generation is -1 (e.g., 0 -1): It is a Nephew/Niece or Child.
-    
-    RULE #3: SPECIFIC PATTERN OVERRIDES (Highest Priority)
-    - [Parent] -> [Sibling] -> [Child] === COUSIN (Generation 0).
-      (e.g. mother -> younger_bro -> daughter = 表妹/表姐)
-      (e.g. father -> elder_bro -> son = 堂哥)
-    - [Sibling] -> [Child] === NEPHEW/NIECE (Generation -1).
-    
+    RULE #4: UNCLES / AUNTS
+    - [Cousin] -> [Parent] = UNCLE / AUNT.
+       - 'cousin_elder_male' (Paternal) -> 'father' = Paternal Uncle.
+
     Task:
-    1. Perform the Chain Reduction.
-    2. Verify with Generational Math.
-    3. Provide the final title in ${targetLang}.
+    1. Check Rule #0 first.
+    2. Apply reduction logic.
+    3. Translate final title to ${targetLang}.
+    4. Choose appropriate emoji.
     
     Output JSON:
     - title (Formal)
     - colloquial (Address term)
-    - description (Explain the path: e.g. "Mother's Brother's Daughter")
+    - description (1 sentence explanation)
     - emoji
     - relationPath
   `;
